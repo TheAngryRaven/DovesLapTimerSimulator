@@ -76,3 +76,5 @@ See [CLAUDE.md](CLAUDE.md) for full architecture details and C++ port-back notes
 
 - [DovesLapTimer](https://github.com/TheAngryRaven/DovesLapTimer) — C++ GPS lap timing library (v3.1.1)
 - [DovesDataLogger](https://github.com/TheAngryRaven/DovesDataLogger) — Arduino hardware datalogger
+
+![screenshot of simulated track data](screenshot.png)
