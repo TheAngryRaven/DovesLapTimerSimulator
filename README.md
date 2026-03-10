@@ -10,6 +10,8 @@ python -m http.server 8080
 
 Open `http://localhost:8080`. No build step, no npm, no dependencies to install.
 
+Example: [https://theangryraven.github.io/DovesLapTimerSimulator/](https://theangryraven.github.io/DovesLapTimerSimulator/)
+
 ## What It Does
 
 - Simulates 25Hz GPS data by dragging a marker on a Leaflet map
