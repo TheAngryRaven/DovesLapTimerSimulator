@@ -40,8 +40,10 @@ DovesSchizoTest/
 │   │   ├── crossing-detection.js # isObtuseTriangle, insideLineThreshold, pointOnSideOfLine
 │   │   ├── interpolation.js      # catmullRom, interpolateWeight, interpolateCrossingPoint
 │   │   ├── DovesLapTimer.js      # Main class - faithful port of the C++ class
-│   │   ├── course-detector.js    # Course detection state machine (NEW)
-│   │   └── course-manager.js     # Multi-course timer orchestrator (NEW)
+│   │   ├── direction-detector.js # Forward/reverse direction detection
+│   │   ├── course-detector.js    # Course detection state machine (ranked matching)
+│   │   ├── course-manager.js     # Multi-course timer orchestrator + sanity check
+│   │   └── waypoint-lap-timer.js # Universal fallback lap timer ("Lap Anything")
 │   ├── sim/
 │   │   ├── gps-simulator.js      # 25Hz loop that feeds any duck-typed target
 │   │   ├── track-data.js         # Legacy track coordinates (still importable)
@@ -101,8 +103,10 @@ Sector lines are optional per course. `lengthFt` is required for detection.
 | `js/lib/crossing-detection.js` | Class methods: `isObtuseTriangle()`, `insideLineThreshold()`, `pointOnSideOfLine()` |
 | `js/lib/interpolation.js` | Private methods: `catmullRom()`, `interpolateWeight()`, `interpolateCrossingPoint()` |
 | `js/lib/DovesLapTimer.js` | `DovesLapTimer` class in `.h`/`.cpp` |
+| `js/lib/direction-detector.js` | `DirectionDetector` class (embedded or separate `.h`/`.cpp`) |
 | `js/lib/course-detector.js` | `CourseDetector` class (new `.h`/`.cpp` or in DovesLapTimer) |
 | `js/lib/course-manager.js` | `CourseManager` class owning array of `DovesLapTimer` + `CourseDetector` |
+| `js/lib/waypoint-lap-timer.js` | `WaypointLapTimer` class (new `.h`/`.cpp`) |
 
 ### Key Differences From C++
 
@@ -125,6 +129,12 @@ Sector lines are optional per course. `lengthFt` is required for detection.
 9. **CourseManager owns multiple timers** - JS creates them dynamically. Port back: fixed-size array of `DovesLapTimer` (max 6-8 courses) with `active` flags. Reduce buffer size per timer if RAM is tight.
 
 10. **CourseDetector uses haversine as import** - In C++ it's a class method or can use the existing `DovesLapTimer::haversine()`. Port back: either make it a friend class or duplicate the haversine call.
+
+11. **DirectionDetector owned by DovesLapTimer** - Simple state machine, minimal RAM. Port back: embed as member or small helper class. Reset in `reset()`.
+
+12. **WaypointLapTimer is independent** - Duck-typed to match DovesLapTimer's public API. Port back: separate class with same getter signatures. Circular buffer of fixed size (50 entries). Uses haversine for proximity checks.
+
+13. **CourseDetector ranked matching** - `_matchCourseRanked()` builds sorted candidate list, CourseManager validates via `raceStarted` sanity check. Port back: fixed-size candidate array (max 8), CourseManager walks it.
 
 ### When Adding New Features
 

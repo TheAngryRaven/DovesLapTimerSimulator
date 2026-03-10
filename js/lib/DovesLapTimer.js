@@ -17,6 +17,7 @@ import {
 import { haversine, haversine3D, pointLineSegmentDistance } from './geo-math.js';
 import { insideLineThreshold, pointOnSideOfLine } from './crossing-detection.js';
 import { interpolateCrossingPoint } from './interpolation.js';
+import { DirectionDetector } from './direction-detector.js';
 
 export class DovesLapTimer {
   /**
@@ -30,6 +31,9 @@ export class DovesLapTimer {
 
     // Buffer size (C++: compile-time constant based on RAM)
     this._bufferSize = CROSSING_POINT_BUFFER_SIZE;
+
+    // Direction detection
+    this._directionDetector = new DirectionDetector();
 
     // Initialize all state
     this.forceLinear = true;
@@ -72,6 +76,11 @@ export class DovesLapTimer {
    */
   _resetState() {
     this.millisecondsSinceMidnight = 0;
+
+    // Reset direction detector (may not exist yet during constructor)
+    if (this._directionDetector) {
+      this._directionDetector.reset();
+    }
 
     // Timing
     this.raceStarted = false;
@@ -425,7 +434,17 @@ export class DovesLapTimer {
       return;
     }
 
-    if (sectorNumber === 0) {
+    // Feed direction detector with raw sector number
+    this._directionDetector.onLineCrossing(sectorNumber);
+
+    // Remap sector number for reverse direction (swap 2↔3)
+    let effectiveSector = sectorNumber;
+    if (this._directionDetector.isReverse() && sectorNumber >= 2) {
+      effectiveSector = (sectorNumber === 2) ? 3 : 2;
+      this._debug(`Direction reverse: physical S${sectorNumber} → logical S${effectiveSector}`);
+    }
+
+    if (effectiveSector === 0) {
       // Start/finish line
       if (this.raceStarted && this.currentSector === 3) {
         this.currentLapSector3Time = crossingTime - this.currentSectorStartTime;
@@ -440,7 +459,7 @@ export class DovesLapTimer {
       this.currentLapSector3Time = 0;
       this._debug('Starting Sector 1');
 
-    } else if (sectorNumber === 2) {
+    } else if (effectiveSector === 2) {
       if (this.currentSector === 1) {
         this.currentLapSector1Time = crossingTime - this.currentSectorStartTime;
         this.currentSector = 2;
@@ -451,7 +470,7 @@ export class DovesLapTimer {
         this.currentSector = 0;
       }
 
-    } else if (sectorNumber === 3) {
+    } else if (effectiveSector === 3) {
       if (this.currentSector === 2) {
         this.currentLapSector2Time = crossingTime - this.currentSectorStartTime;
         this.currentSector = 3;
@@ -591,4 +610,8 @@ export class DovesLapTimer {
   getBestSector3LapNumber() { return this.bestSector3LapNumber; }
   getCurrentSector() { return this.currentSector; }
   areSectorLinesConfigured() { return this.sector2LineConfigured && this.sector3LineConfigured; }
+
+  // Direction detection getters
+  getDirection() { return this._directionDetector.getDirection(); }
+  isDirectionResolved() { return this._directionDetector.isResolved(); }
 }

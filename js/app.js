@@ -15,7 +15,11 @@ import { DataDisplay } from './ui/data-display.js';
 import { Controls } from './ui/controls.js';
 import { SessionLogger } from './sim/session-logger.js';
 import { DEFAULT_TRACK_JSON, getTrackCenter } from './sim/track-data-json.js';
-import { DETECT_STATE_WAYPOINT_SET, DETECT_STATE_DETECTED } from './lib/course-detector.js';
+import {
+  DETECT_STATE_WAYPOINT_SET,
+  DETECT_STATE_DETECTED,
+  DETECT_STATE_CANDIDATES_READY,
+} from './lib/course-detector.js';
 
 // ─── STATE ────────────────────────────────────────────────────────────
 
@@ -36,6 +40,7 @@ let lastDisplayUpdate = 0;
 // Track detection state changes for map updates
 let waypointDrawn = false;
 let detectionHandled = false;
+let lapAnythingHandled = false;
 
 // ─── INITIALIZATION ──────────────────────────────────────────────────
 
@@ -69,6 +74,8 @@ function initDataDisplay() {
     trackName: 'val-track-name',
     detectionState: 'val-detection-state',
     detectedCourse: 'val-detected-course',
+    timingMode: 'val-timing-mode',
+    direction: 'val-direction',
     coursePanels: 'course-panels',
 
     // Timing
@@ -149,6 +156,7 @@ function handleReset() {
   mapManager.removeWaypointMarker();
   waypointDrawn = false;
   detectionHandled = false;
+  lapAnythingHandled = false;
 
   // Redraw all course lines (they may have been pruned)
   drawAllCourseLines();
@@ -184,6 +192,7 @@ function handleTrackDataChange(newTrackJson) {
   // Reset state
   waypointDrawn = false;
   detectionHandled = false;
+  lapAnythingHandled = false;
   updateDetectionDisplay('--');
   dataDisplay.clearMultiCourse();
   resetTimingDisplay();
@@ -206,14 +215,21 @@ function handleSimTick(simInfo) {
 
   // Update detection status
   const detector = courseManager.getDetector();
-  const detectorState = detector.getState();
+  const detectorState = detector ? detector.getState() : 'idle';
   updateDetectionDisplay(detectorState);
 
   // Update multi-course panels (always, shows all courses during detection)
   dataDisplay.updateMultiCourse(courseManager, simInfo);
 
   // Update single-course timing display
-  if (courseManager.isDetectionComplete()) {
+  if (courseManager.isLapAnythingActive()) {
+    // Lap Anything mode — use waypoint lap timer
+    const lapTimer = courseManager.getLapAnythingTimer();
+    if (lapTimer) {
+      dataDisplay.update(lapTimer, simInfo);
+      dataDisplay.setCrossingIndicator(lapTimer.getCrossing());
+    }
+  } else if (courseManager.isDetectionComplete()) {
     const activeTimer = courseManager.getActiveTimer();
     if (activeTimer) {
       dataDisplay.update(activeTimer, simInfo);
@@ -233,15 +249,54 @@ function handleSimTick(simInfo) {
 
 function handleDetectionMapUpdates() {
   const detector = courseManager.getDetector();
+
+  // No detector means no courses loaded (Lap Anything from start)
+  if (!detector) {
+    if (courseManager.isLapAnythingActive() && !lapAnythingHandled) {
+      lapAnythingHandled = true;
+      // Show waypoint marker from Lap Anything timer
+      const lapTimer = courseManager.getLapAnythingTimer();
+      if (lapTimer) {
+        const wp = lapTimer.getWaypoint();
+        if (wp) {
+          mapManager.setWaypointMarker(wp.lat, wp.lng);
+        }
+      }
+    }
+    return;
+  }
+
   const state = detector.getState();
 
   // Draw waypoint blip when first set
-  if (state === DETECT_STATE_WAYPOINT_SET && !waypointDrawn) {
+  if ((state === DETECT_STATE_WAYPOINT_SET || state === DETECT_STATE_CANDIDATES_READY) && !waypointDrawn) {
     const wp = detector.getWaypoint();
     if (wp) {
       mapManager.setWaypointMarker(wp.lat, wp.lng);
       waypointDrawn = true;
     }
+  }
+
+  // Handle Lap Anything activation (detection failed)
+  if (courseManager.isLapAnythingActive() && !lapAnythingHandled) {
+    lapAnythingHandled = true;
+
+    // Remove all course lines from map
+    const allCourses = courseManager.getAllCourses();
+    for (let i = 0; i < allCourses.length; i++) {
+      mapManager.removeCourseLines(i);
+    }
+
+    // Keep waypoint marker (Lap Anything uses it)
+    // Update waypoint from Lap Anything timer if it has one
+    const lapTimer = courseManager.getLapAnythingTimer();
+    if (lapTimer) {
+      const wp = lapTimer.getWaypoint();
+      if (wp) {
+        mapManager.setWaypointMarker(wp.lat, wp.lng);
+      }
+    }
+    return;
   }
 
   // Handle detection complete - prune courses, clean up map
@@ -268,11 +323,11 @@ function handleDetectionMapUpdates() {
 // ─── DISPLAY HELPERS ─────────────────────────────────────────────────
 
 function updateDetectionDisplay(state) {
-  const detector = courseManager.getDetector();
   dataDisplay.setDetectionStatus(
     courseManager.getTrackName(),
     state,
-    courseManager.getActiveCourseName()
+    courseManager.getActiveCourseName(),
+    courseManager.isLapAnythingActive()
   );
 }
 

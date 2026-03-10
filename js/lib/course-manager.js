@@ -2,7 +2,8 @@
  * CourseManager - orchestrates multiple DovesLapTimer instances + CourseDetector.
  *
  * Feeds ALL course timers the same GPS data simultaneously.
- * Once the CourseDetector identifies the course, prunes inactive timers.
+ * Once the CourseDetector identifies candidates, validates via raceStarted sanity check.
+ * Falls back to WaypointLapTimer ("Lap Anything") if detection fails.
  *
  * Implements the same updateCurrentTime() / loop() interface as DovesLapTimer,
  * so the GpsSimulator can feed it via duck typing.
@@ -10,13 +11,15 @@
  * This module gets ported back to C++.
  *
  * C++ mapping:
- *   Will become CourseManager class owning an array of DovesLapTimer instances
- *   and a CourseDetector. Fixed-size array on Arduino (no dynamic allocation).
+ *   Will become CourseManager class owning an array of DovesLapTimer instances,
+ *   a CourseDetector, and optionally a WaypointLapTimer.
+ *   Fixed-size array on Arduino (no dynamic allocation).
  */
 
 import { DovesLapTimer } from './DovesLapTimer.js';
-import { CourseDetector } from './course-detector.js';
-import { DEFAULT_CROSSING_THRESHOLD_METERS } from './constants.js';
+import { CourseDetector, DETECT_STATE_CANDIDATES_READY } from './course-detector.js';
+import { WaypointLapTimer } from './waypoint-lap-timer.js';
+import { DEFAULT_CROSSING_THRESHOLD_METERS, COURSE_DETECT_MAX_REJECTIONS } from './constants.js';
 
 export class CourseManager {
   /**
@@ -33,6 +36,12 @@ export class CourseManager {
     this._detector = null;
     this._activeCourseIndex = -1;
     this._detectionComplete = false;
+
+    // Lap Anything — always running alongside course timers so it has
+    // accumulated data (odometer, waypoint, raceStarted) when activated
+    this._lapAnythingTimer = null;
+    this._lapAnythingActive = false;
+    this._detectionRejectionCount = 0;
 
     this._initCourses();
   }
@@ -79,50 +88,112 @@ export class CourseManager {
     });
 
     // Create the detector with course names and lengths
-    this._detector = new CourseDetector(
-      courses.map(c => ({ name: c.name, lengthFt: c.lengthFt }))
-    );
+    if (courses.length > 0) {
+      this._detector = new CourseDetector(
+        courses.map(c => ({ name: c.name, lengthFt: c.lengthFt }))
+      );
+    } else {
+      this._detector = null;
+    }
 
     this._activeCourseIndex = -1;
     this._detectionComplete = false;
+    this._detectionRejectionCount = 0;
+    this._lapAnythingActive = false;
+
+    // Always create WaypointLapTimer — it runs alongside course timers
+    // so it has accumulated data (odometer, waypoint, laps) when/if activated.
+    // On C++ this is a fixed-size member, not dynamic allocation.
+    this._lapAnythingTimer = new WaypointLapTimer(this._debugCallback);
+
+    // If no courses loaded, activate Lap Anything immediately
+    if (courses.length === 0) {
+      this._activateLapAnything();
+    }
   }
 
   // ─── DUCK-TYPED FEED INTERFACE ──────────────────────────────────────
   // These match DovesLapTimer's API so GpsSimulator can feed either one.
 
-  /** Update time on ALL active timers */
+  /** Update time on ALL active timers (and Lap Anything if active) */
   updateCurrentTime(ms) {
     for (const ct of this._courseTimers) {
       if (ct.active) {
         ct.timer.updateCurrentTime(ms);
       }
     }
+
+    if (this._lapAnythingTimer) {
+      this._lapAnythingTimer.updateCurrentTime(ms);
+    }
   }
 
-  /** Feed GPS data to ALL active timers and the detector */
+  /** Feed GPS data to ALL active timers, the detector, and Lap Anything */
   loop(lat, lng, alt, speedKnots) {
-    // Feed all active timers
+    // Feed all active course timers
     for (const ct of this._courseTimers) {
       if (ct.active) {
         ct.timer.loop(lat, lng, alt, speedKnots);
       }
     }
 
+    // Feed Lap Anything timer if active
+    if (this._lapAnythingTimer) {
+      this._lapAnythingTimer.loop(lat, lng, alt, speedKnots);
+    }
+
     // Feed the detector (needs speed in km/h and odometer from any active timer)
-    if (!this._detectionComplete && this._courseTimers.length > 0) {
+    if (!this._detectionComplete && this._detector && this._courseTimers.length > 0) {
       const speedKmh = speedKnots * 1.852;
-      // Use the first active timer's odometer (they all get the same data)
       const firstActive = this._courseTimers.find(ct => ct.active);
       const odometer = firstActive ? firstActive.timer.getTotalDistanceTraveled() : 0;
 
       const result = this._detector.update(lat, lng, speedKmh, odometer);
 
-      if (result.detectedIndex >= 0 && !this._detectionComplete) {
-        this._activeCourseIndex = result.detectedIndex;
-        this._detectionComplete = true;
-        this._debug(`Course detected: ${this._courseTimers[result.detectedIndex].name}`);
+      // Handle candidates_ready state — validate via raceStarted sanity check
+      if (result.state === DETECT_STATE_CANDIDATES_READY) {
+        this._handleCandidatesReady(result.rankedMatches);
       }
     }
+  }
+
+  // ─── CANDIDATE VALIDATION ──────────────────────────────────────────
+
+  /**
+   * Walk ranked candidates, accept the first one where raceStarted === true.
+   * If none qualify, reject all and increment rejection counter.
+   */
+  _handleCandidatesReady(rankedMatches) {
+    for (const candidate of rankedMatches) {
+      const ct = this._courseTimers[candidate.index];
+      if (ct && ct.active && ct.timer.getRaceStarted()) {
+        // Sanity check passed — accept this candidate
+        this._detector.acceptCandidate(candidate.index);
+        this._activeCourseIndex = candidate.index;
+        this._detectionComplete = true;
+        this._debug(`Course detected (validated): ${ct.name}`);
+        return;
+      }
+    }
+
+    // No candidate had raceStarted — reject all
+    this._detector.rejectAllCandidates();
+    this._detectionRejectionCount++;
+    this._debug(`Detection rejected (${this._detectionRejectionCount}/${COURSE_DETECT_MAX_REJECTIONS}) — no candidate has raceStarted`);
+
+    // After max rejections, fall back to Lap Anything
+    if (this._detectionRejectionCount >= COURSE_DETECT_MAX_REJECTIONS) {
+      this._debug('Max detection rejections reached — activating Lap Anything');
+      this._activateLapAnything();
+    }
+  }
+
+  // ─── LAP ANYTHING ──────────────────────────────────────────────────
+
+  _activateLapAnything() {
+    this._lapAnythingActive = true;
+    this._detectionComplete = true;
+    // Timer already exists and has been accumulating data — no creation needed
   }
 
   // ─── COURSE MANAGEMENT ──────────────────────────────────────────────
@@ -178,6 +249,7 @@ export class CourseManager {
 
   /** Get the active course name, or null */
   getActiveCourseName() {
+    if (this._lapAnythingActive) return 'Lap Anything';
     if (this._activeCourseIndex < 0) return null;
     return this._courseTimers[this._activeCourseIndex].name;
   }
@@ -195,6 +267,20 @@ export class CourseManager {
   /** Get the number of courses */
   getCourseCount() {
     return this._courseTimers.length;
+  }
+
+  /** Lap Anything getters */
+  isLapAnythingActive() {
+    return this._lapAnythingActive;
+  }
+
+  getLapAnythingTimer() {
+    return this._lapAnythingTimer;
+  }
+
+  /** Get detection rejection count */
+  getDetectionRejectionCount() {
+    return this._detectionRejectionCount;
   }
 
   // ─── DEBUG ──────────────────────────────────────────────────────────

@@ -6,7 +6,8 @@
  *   2. Create a "waypoint" at that position
  *   3. Wait for driver to return near the waypoint (completed ~1 lap)
  *   4. Compare driven distance to each course's lengthFt
- *   5. Select the closest match within tolerance
+ *   5. Build ranked list of candidates within tolerance
+ *   6. CourseManager validates candidates via raceStarted sanity check
  *
  * This module gets ported back to C++.
  *
@@ -29,6 +30,7 @@ import {
 export const DETECT_STATE_IDLE = 'idle';
 export const DETECT_STATE_WAITING_FOR_SPEED = 'waiting_for_speed';
 export const DETECT_STATE_WAYPOINT_SET = 'waypoint_set';
+export const DETECT_STATE_CANDIDATES_READY = 'candidates_ready';
 export const DETECT_STATE_DETECTED = 'detected';
 
 export class CourseDetector {
@@ -48,6 +50,7 @@ export class CourseDetector {
     this._waypointLng = 0;
     this._waypointOdometer = 0;
     this._detectedCourseIndex = -1;
+    this._rankedMatches = [];
   }
 
   // ─── MAIN UPDATE ────────────────────────────────────────────────────
@@ -59,7 +62,7 @@ export class CourseDetector {
    * @param {number} lng - Current longitude
    * @param {number} speedKmh - Current speed in km/h
    * @param {number} totalOdometer - Total distance traveled in meters
-   * @returns {{ state: string, detectedIndex: number }} Current detection status
+   * @returns {{ state: string, detectedIndex: number, rankedMatches: Array }}
    */
   update(lat, lng, speedKmh, totalOdometer) {
     if (this._state === DETECT_STATE_IDLE) {
@@ -77,6 +80,7 @@ export class CourseDetector {
     return {
       state: this._state,
       detectedIndex: this._detectedCourseIndex,
+      rankedMatches: this._rankedMatches,
     };
   }
 
@@ -110,18 +114,18 @@ export class CourseDetector {
     const distToWaypoint = haversine(lat, lng, this._waypointLat, this._waypointLng);
 
     if (distToWaypoint < COURSE_DETECT_WAYPOINT_PROXIMITY_METERS) {
-      this._matchCourse(distanceSinceWaypoint);
+      this._matchCourseRanked(distanceSinceWaypoint);
     }
   }
 
   /**
-   * Step 3: Compare driven distance to each course length. Pick closest match.
+   * Step 3: Build ranked list of candidates sorted by distance match quality.
+   * Does NOT auto-select — CourseManager validates via raceStarted sanity check.
    */
-  _matchCourse(distanceMeters) {
+  _matchCourseRanked(distanceMeters) {
     const distanceFt = distanceMeters * METERS_TO_FEET;
 
-    let bestIndex = -1;
-    let bestRatio = Infinity;
+    const candidates = [];
 
     for (let i = 0; i < this._courses.length; i++) {
       const courseLengthFt = this._courses[i].lengthFt;
@@ -129,18 +133,39 @@ export class CourseDetector {
 
       const ratio = Math.abs(distanceFt - courseLengthFt) / courseLengthFt;
 
-      if (ratio < bestRatio) {
-        bestRatio = ratio;
-        bestIndex = i;
+      if (ratio <= COURSE_DETECT_DISTANCE_TOLERANCE_PCT) {
+        candidates.push({ index: i, ratio: ratio });
       }
     }
 
-    // Only accept if within tolerance
-    if (bestIndex !== -1 && bestRatio <= COURSE_DETECT_DISTANCE_TOLERANCE_PCT) {
-      this._detectedCourseIndex = bestIndex;
-      this._state = DETECT_STATE_DETECTED;
+    if (candidates.length > 0) {
+      // Sort by ratio (best match first)
+      candidates.sort((a, b) => a.ratio - b.ratio);
+      this._rankedMatches = candidates;
+      this._state = DETECT_STATE_CANDIDATES_READY;
     }
-    // If no match within tolerance, stay in waypoint_set and try again next pass
+    // If no candidates within tolerance, stay in waypoint_set and try again next pass
+  }
+
+  // ─── CANDIDATE ACCEPT/REJECT API ───────────────────────────────────
+
+  /**
+   * Accept a specific candidate. Called by CourseManager after raceStarted validation.
+   * @param {number} index - Course index to accept
+   */
+  acceptCandidate(index) {
+    this._detectedCourseIndex = index;
+    this._rankedMatches = [];
+    this._state = DETECT_STATE_DETECTED;
+  }
+
+  /**
+   * Reject all candidates. Returns to waypoint_set to try again on next pass.
+   * Called by CourseManager when no candidate has raceStarted === true.
+   */
+  rejectAllCandidates() {
+    this._rankedMatches = [];
+    this._state = DETECT_STATE_WAYPOINT_SET;
   }
 
   // ─── GETTERS ────────────────────────────────────────────────────────
@@ -151,6 +176,10 @@ export class CourseDetector {
 
   getDetectedCourseIndex() {
     return this._detectedCourseIndex;
+  }
+
+  getRankedMatches() {
+    return this._rankedMatches;
   }
 
   getWaypoint() {

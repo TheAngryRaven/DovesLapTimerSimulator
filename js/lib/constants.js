@@ -38,5 +38,24 @@ export const COURSE_DETECT_MIN_DISTANCE_METERS = 200;
 // Distance tolerance for course matching (25% = 0.25)
 export const COURSE_DETECT_DISTANCE_TOLERANCE_PCT = 0.25;
 
+// Max detection rejections before falling back to Lap Anything
+export const COURSE_DETECT_MAX_REJECTIONS = 3;
+
 // Conversion factor
 export const METERS_TO_FEET = 3.28084;
+
+// ─── WAYPOINT LAP TIMER CONSTANTS ───────────────────────────────────
+
+// Minimum distance traveled before waypoint proximity triggers (meters)
+// Smaller than course detection (200m) since we just need to prevent
+// immediate re-trigger after a crossing, not validate a full lap length.
+export const WAYPOINT_LAP_MIN_DISTANCE_METERS = 100;
+
+// Proximity zone for waypoint-based lap timing (meters)
+// Larger than course detection proximity (10m) because this needs to trigger
+// consistently every lap, not just once. Track width is ~15-20m so 30m gives
+// a full track-width of leeway for imprecise driving lines.
+export const WAYPOINT_LAP_PROXIMITY_METERS = 30;
+
+// Buffer size for approach points in waypoint lap timer
+export const WAYPOINT_LAP_BUFFER_SIZE = 50;

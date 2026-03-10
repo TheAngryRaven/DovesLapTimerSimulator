@@ -20,10 +20,11 @@ export class DataDisplay {
   // ─── DETECTION STATUS ─────────────────────────────────────────────
 
   /** Update the course detection status display */
-  setDetectionStatus(trackName, state, detectedCourseName) {
+  setDetectionStatus(trackName, state, detectedCourseName, isLapAnything = false) {
     this._setText('trackName', trackName || '--');
     this._setText('detectionState', this._formatDetectionState(state));
     this._setText('detectedCourse', detectedCourseName || '--');
+    this._setText('timingMode', isLapAnything ? 'LAP ANYTHING' : '');
   }
 
   // ─── MULTI-COURSE DISPLAY ─────────────────────────────────────────
@@ -103,6 +104,7 @@ export class DataDisplay {
     this._setText('raceStarted', lapTimer.getRaceStarted() ? 'YES' : 'NO');
     this._setText('currentSector', this._formatSector(lapTimer.getCurrentSector()));
     this._setText('paceDifference', this._formatPace(lapTimer.getPaceDifference()));
+    this._setText('direction', this._formatDirection(lapTimer.getDirection()));
 
     // Sector times
     this._setText('sector1Time', this._formatTime(lapTimer.getCurrentLapSector1Time()));
@@ -162,11 +164,21 @@ export class DataDisplay {
     return (meters / 1000).toFixed(2) + ' km';
   }
 
+  _formatDirection(direction) {
+    switch (direction) {
+      case 'forward': return 'Forward';
+      case 'reverse': return 'Reverse';
+      case 'unknown': return '--';
+      default: return '--';
+    }
+  }
+
   _formatDetectionState(state) {
     switch (state) {
       case 'idle': return 'Idle';
       case 'waiting_for_speed': return 'Waiting for speed...';
       case 'waypoint_set': return 'Waypoint set - driving...';
+      case 'candidates_ready': return 'Validating...';
       case 'detected': return 'Detected!';
       default: return state || '--';
     }
