@@ -1,0 +1,218 @@
+/* ─── RESET & BASE ──────────────────────────────────────────────────── */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Courier New', Courier, monospace;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ─── LAYOUT ────────────────────────────────────────────────────────── */
+
+.app-header {
+  background: #16213e;
+  padding: 8px 16px;
+  border-bottom: 2px solid #0f3460;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.app-header h1 {
+  font-size: 16px;
+  color: #e94560;
+}
+
+.app-header .status {
+  font-size: 12px;
+  color: #666;
+}
+
+.main-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ─── MAP ───────────────────────────────────────────────────────────── */
+
+.map-container {
+  flex: 1;
+  position: relative;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+/* ─── SIDEBAR ───────────────────────────────────────────────────────── */
+
+.sidebar {
+  width: 340px;
+  background: #16213e;
+  border-left: 2px solid #0f3460;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.panel {
+  padding: 12px;
+  border-bottom: 1px solid #0f3460;
+}
+
+.panel h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #e94560;
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+}
+
+/* ─── CONTROLS ──────────────────────────────────────────────────────── */
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+button {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  padding: 6px 16px;
+  border: 1px solid #0f3460;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  cursor: pointer;
+  flex: 1;
+}
+
+button:hover {
+  background: #0f3460;
+}
+
+button.running {
+  background: #e94560;
+  color: white;
+  border-color: #e94560;
+}
+
+/* ─── DATA GRID ─────────────────────────────────────────────────────── */
+
+.data-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.data-item {
+  padding: 4px 0;
+}
+
+.data-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.data-label {
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+}
+
+.data-value {
+  font-size: 14px;
+  color: #00ff88;
+}
+
+.data-value.time-large {
+  font-size: 20px;
+  color: #00ff88;
+}
+
+.data-value.time-best {
+  color: #ff00ff;
+}
+
+.data-value.pace-positive {
+  color: #ff4444;
+}
+
+.data-value.pace-negative {
+  color: #44ff44;
+}
+
+/* ─── CROSSING INDICATOR ────────────────────────────────────────────── */
+
+#crossing-indicator {
+  font-size: 12px;
+  font-weight: bold;
+  color: transparent;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+}
+
+#crossing-indicator.active {
+  color: #e94560;
+  animation: blink 0.3s ease-in-out infinite alternate;
+}
+
+@keyframes blink {
+  from { opacity: 0.5; }
+  to { opacity: 1.0; }
+}
+
+/* ─── TRACK DATA INPUTS ─────────────────────────────────────────────── */
+
+.track-inputs label {
+  display: block;
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
+.track-inputs input {
+  width: 100%;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  padding: 4px 6px;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+}
+
+.track-inputs input:focus {
+  outline: none;
+  border-color: #e94560;
+}
+
+/* ─── DRIVER ICON ───────────────────────────────────────────────────── */
+
+.driver-icon {
+  background: none !important;
+  border: none !important;
+}
+
+.driver-dot {
+  width: 20px;
+  height: 20px;
+  background: #e94560;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(233, 69, 96, 0.6);
+}

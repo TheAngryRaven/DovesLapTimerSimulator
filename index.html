@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DovesLapTimer - Datalogger Simulator</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="app-header">
+    <h1>DovesLapTimer Simulator</h1>
+    <span class="status">25Hz GPS Sim | Drag marker to drive</span>
+  </div>
+
+  <!-- Main Layout -->
+  <div class="main-content">
+
+    <!-- Map -->
+    <div class="map-container">
+      <div id="map"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+
+      <!-- Controls -->
+      <div class="panel">
+        <h2>Controls</h2>
+        <div class="button-row">
+          <button id="btn-start-stop">Start</button>
+          <button id="btn-reset">Reset</button>
+        </div>
+        <div id="crossing-indicator"></div>
+      </div>
+
+      <!-- Timing Data -->
+      <div class="panel">
+        <h2>Timing</h2>
+        <div class="data-grid">
+          <div class="data-item full-width">
+            <div class="data-label">Current Lap</div>
+            <div class="data-value time-large" id="val-current-lap">--:--.---</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Last Lap</div>
+            <div class="data-value" id="val-last-lap">--:--.---</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Best Lap</div>
+            <div class="data-value time-best" id="val-best-lap">--:--.---</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Laps</div>
+            <div class="data-value" id="val-lap-count">0</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Best Lap #</div>
+            <div class="data-value" id="val-best-lap-num">0</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Race Started</div>
+            <div class="data-value" id="val-race-started">NO</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Pace +/-</div>
+            <div class="data-value" id="val-pace-diff">--.---</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sector Times -->
+      <div class="panel">
+        <h2>Sectors</h2>
+        <div class="data-grid">
+          <div class="data-item">
+            <div class="data-label">Current Sector</div>
+            <div class="data-value" id="val-current-sector">-</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Optimal Lap</div>
+            <div class="data-value time-best" id="val-optimal-lap">--:--.---</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">S1 Time</div>
+            <div class="data-value" id="val-sector1">--:--.---</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Best S1</div>
+            <div class="data-value time-best" id="val-best-s1">--:--.---</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">S2 Time</div>
+            <div class="data-value" id="val-sector2">--:--.---</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Best S2</div>
+            <div class="data-value time-best" id="val-best-s2">--:--.---</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">S3 Time</div>
+            <div class="data-value" id="val-sector3">--:--.---</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Best S3</div>
+            <div class="data-value time-best" id="val-best-s3">--:--.---</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Distance & Status -->
+      <div class="panel">
+        <h2>Distance & Status</h2>
+        <div class="data-grid">
+          <div class="data-item">
+            <div class="data-label">Lap Distance</div>
+            <div class="data-value" id="val-current-dist">0 m</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Total Distance</div>
+            <div class="data-value" id="val-total-dist">0 m</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Speed</div>
+            <div class="data-value" id="val-speed">0.0 km/h</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Ticks</div>
+            <div class="data-value" id="val-tick-count">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Track Data -->
+      <div class="panel">
+        <h2>Track Data</h2>
+        <div class="track-inputs">
+          <label>Start/Finish (latA, lngA, latB, lngB)</label>
+          <input type="text" id="input-start-finish" />
+          <label>Sector 2 Line</label>
+          <input type="text" id="input-sector-2" />
+          <label>Sector 3 Line</label>
+          <input type="text" id="input-sector-3" />
+        </div>
+        <div class="button-row" style="margin-top: 8px;">
+          <button id="btn-apply-track">Apply Track Data</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- App (ES modules) -->
+  <script type="module" src="js/app.js"></script>
+
+</body>
+</html>
