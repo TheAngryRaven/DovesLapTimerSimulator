@@ -40,8 +40,28 @@
         <div id="crossing-indicator"></div>
       </div>
 
-      <!-- Timing Data -->
+      <!-- Course Detection -->
       <div class="panel">
+        <h2>Course Detection</h2>
+        <div class="data-grid">
+          <div class="data-item">
+            <div class="data-label">Track</div>
+            <div class="data-value" id="val-track-name">--</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Detection</div>
+            <div class="data-value" id="val-detection-state">--</div>
+          </div>
+          <div class="data-item full-width">
+            <div class="data-label">Detected Course</div>
+            <div class="data-value time-best" id="val-detected-course">--</div>
+          </div>
+        </div>
+        <div id="course-panels"></div>
+      </div>
+
+      <!-- Timing Data -->
+      <div class="panel" id="panel-timing">
         <h2>Timing</h2>
         <div class="data-grid">
           <div class="data-item full-width">
@@ -76,7 +96,7 @@
       </div>
 
       <!-- Sector Times -->
-      <div class="panel">
+      <div class="panel" id="panel-sectors">
         <h2>Sectors</h2>
         <div class="data-grid">
           <div class="data-item">
@@ -137,16 +157,11 @@
         </div>
       </div>
 
-      <!-- Track Data -->
+      <!-- Track Data (JSON) -->
       <div class="panel">
-        <h2>Track Data</h2>
-        <div class="track-inputs">
-          <label>Start/Finish (latA, lngA, latB, lngB)</label>
-          <input type="text" id="input-start-finish" />
-          <label>Sector 2 Line</label>
-          <input type="text" id="input-sector-2" />
-          <label>Sector 3 Line</label>
-          <input type="text" id="input-sector-3" />
+        <h2>Track Data (JSON)</h2>
+        <div class="track-json-input">
+          <textarea id="input-track-json" rows="12" spellcheck="false"></textarea>
         </div>
         <div class="button-row" style="margin-top: 8px;">
           <button id="btn-apply-track">Apply Track Data</button>

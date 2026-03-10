@@ -25,6 +25,12 @@ export class MapManager {
     // Driver trail
     this._trail = null;
     this._trailPoints = [];
+
+    // Multi-course line layers: Map<courseIndex, Array<L.polyline>>
+    this._courseLines = new Map();
+
+    // Waypoint blip marker
+    this._waypointMarker = null;
   }
 
   /** Initialize the Leaflet map */
@@ -140,6 +146,100 @@ export class MapManager {
       { color: '#ffcc00', weight: 3, dashArray: '8, 4', opacity: 0.8 }
     ).addTo(this._map);
     this._sector3Line.bindTooltip('Sector 3', { permanent: false });
+  }
+
+  // ─── MULTI-COURSE LINES ────────────────────────────────────────────
+
+  // Color palette for course lines (cycles if more courses than colors)
+  static COURSE_COLORS = ['#ff0000', '#00ccff', '#ffcc00', '#00ff88', '#ff66ff'];
+
+  /**
+   * Draw all lines for all courses from the track JSON.
+   * Each course gets a unique color. Start/finish is solid, sectors are dashed.
+   */
+  drawAllCourseLines(courses) {
+    this.removeAllCourseLines();
+
+    courses.forEach((course, index) => {
+      const color = MapManager.COURSE_COLORS[index % MapManager.COURSE_COLORS.length];
+      const lines = [];
+
+      // Start/finish line (solid)
+      const sfLine = L.polyline(
+        [[course.start_a_lat, course.start_a_lng], [course.start_b_lat, course.start_b_lng]],
+        { color, weight: 4, opacity: 0.9 }
+      ).addTo(this._map);
+      sfLine.bindTooltip(`${course.name} S/F`, { permanent: false });
+      lines.push(sfLine);
+
+      // Sector 2 (dashed)
+      if (course.sector_2_a_lat !== undefined) {
+        const s2Line = L.polyline(
+          [[course.sector_2_a_lat, course.sector_2_a_lng], [course.sector_2_b_lat, course.sector_2_b_lng]],
+          { color, weight: 3, dashArray: '8, 4', opacity: 0.7 }
+        ).addTo(this._map);
+        s2Line.bindTooltip(`${course.name} S2`, { permanent: false });
+        lines.push(s2Line);
+      }
+
+      // Sector 3 (dashed)
+      if (course.sector_3_a_lat !== undefined) {
+        const s3Line = L.polyline(
+          [[course.sector_3_a_lat, course.sector_3_a_lng], [course.sector_3_b_lat, course.sector_3_b_lng]],
+          { color, weight: 3, dashArray: '8, 4', opacity: 0.7 }
+        ).addTo(this._map);
+        s3Line.bindTooltip(`${course.name} S3`, { permanent: false });
+        lines.push(s3Line);
+      }
+
+      this._courseLines.set(index, lines);
+    });
+  }
+
+  /** Remove all lines for a specific course */
+  removeCourseLines(courseIndex) {
+    const lines = this._courseLines.get(courseIndex);
+    if (lines) {
+      lines.forEach(line => line.remove());
+      this._courseLines.delete(courseIndex);
+    }
+  }
+
+  /** Remove all course lines */
+  removeAllCourseLines() {
+    for (const [, lines] of this._courseLines) {
+      lines.forEach(line => line.remove());
+    }
+    this._courseLines.clear();
+
+    // Also clear the old single-line layers
+    if (this._startFinishLine) { this._startFinishLine.remove(); this._startFinishLine = null; }
+    if (this._sector2Line) { this._sector2Line.remove(); this._sector2Line = null; }
+    if (this._sector3Line) { this._sector3Line.remove(); this._sector3Line = null; }
+  }
+
+  // ─── WAYPOINT MARKER ─────────────────────────────────────────────────
+
+  /** Draw the course detection waypoint blip */
+  setWaypointMarker(lat, lng) {
+    this.removeWaypointMarker();
+    this._waypointMarker = L.marker([lat, lng], {
+      icon: L.divIcon({
+        className: 'waypoint-icon',
+        html: '<div class="waypoint-blip"></div>',
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      }),
+      interactive: false,
+    }).addTo(this._map);
+  }
+
+  /** Remove the waypoint blip */
+  removeWaypointMarker() {
+    if (this._waypointMarker) {
+      this._waypointMarker.remove();
+      this._waypointMarker = null;
+    }
   }
 
   /** Center map on a point */

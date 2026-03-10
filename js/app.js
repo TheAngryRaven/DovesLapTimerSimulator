@@ -1,87 +1,77 @@
 /**
  * App - main entry point. Wires together:
- *   - DovesLapTimer (the library)
- *   - GpsSimulator (feeds the library at 25Hz)
- *   - MapManager (Leaflet map + marker)
- *   - DataDisplay (timing data panel)
- *   - Controls (buttons + track data inputs)
+ *   - CourseManager (multiple DovesLapTimer instances + CourseDetector)
+ *   - GpsSimulator (feeds CourseManager at 25Hz via duck typing)
+ *   - MapManager (Leaflet map + marker + multi-course lines)
+ *   - DataDisplay (timing data panel + detection status + course panels)
+ *   - Controls (buttons + track JSON input)
+ *   - SessionLogger (.dove CSV export)
  */
 
-import { DovesLapTimer } from './lib/DovesLapTimer.js';
+import { CourseManager } from './lib/course-manager.js';
 import { GpsSimulator } from './sim/gps-simulator.js';
 import { MapManager } from './ui/map-manager.js';
 import { DataDisplay } from './ui/data-display.js';
 import { Controls } from './ui/controls.js';
 import { SessionLogger } from './sim/session-logger.js';
-import { DEFAULT_START_FINISH, DEFAULT_SECTOR_2, DEFAULT_SECTOR_3, getLineMidpoint } from './sim/track-data.js';
+import { DEFAULT_TRACK_JSON, getTrackCenter } from './sim/track-data-json.js';
+import { DETECT_STATE_WAYPOINT_SET, DETECT_STATE_DETECTED } from './lib/course-detector.js';
 
 // ─── STATE ────────────────────────────────────────────────────────────
 
-let lapTimer = null;
+let courseManager = null;
 let simulator = null;
 let mapManager = null;
 let dataDisplay = null;
 let controls = null;
 let sessionLogger = null;
 
-// Current track configuration
-let trackConfig = {
-  startFinish: DEFAULT_START_FINISH,
-  sector2: DEFAULT_SECTOR_2,
-  sector3: DEFAULT_SECTOR_3,
-};
+// Current track JSON
+let trackJson = DEFAULT_TRACK_JSON;
 
-// Display update throttle (don't update DOM every tick - 25Hz is too fast)
-const DISPLAY_UPDATE_INTERVAL_MS = 100; // 10Hz display refresh
+// Display update throttle
+const DISPLAY_UPDATE_INTERVAL_MS = 100; // 10Hz
 let lastDisplayUpdate = 0;
+
+// Track detection state changes for map updates
+let waypointDrawn = false;
+let detectionHandled = false;
 
 // ─── INITIALIZATION ──────────────────────────────────────────────────
 
-function initLapTimer() {
-  lapTimer = new DovesLapTimer(7.0, (msg) => {
-    console.log('[LapTimer]', msg);
+function initCourseManager() {
+  courseManager = new CourseManager(trackJson, 7.0, (msg) => {
+    console.log('[CourseManager]', msg);
   });
-
-  applyTrackConfig();
-  lapTimer.forceLinearInterpolation();
-  lapTimer.reset();
-}
-
-function applyTrackConfig() {
-  const sf = trackConfig.startFinish;
-  const s2 = trackConfig.sector2;
-  const s3 = trackConfig.sector3;
-
-  lapTimer.setStartFinishLine(sf.pointA.lat, sf.pointA.lng, sf.pointB.lat, sf.pointB.lng);
-  lapTimer.setSector2Line(s2.pointA.lat, s2.pointA.lng, s2.pointB.lat, s2.pointB.lng);
-  lapTimer.setSector3Line(s3.pointA.lat, s3.pointA.lng, s3.pointB.lat, s3.pointB.lng);
 }
 
 function initMap() {
-  const center = getLineMidpoint(trackConfig.startFinish);
+  const center = getTrackCenter(trackJson);
 
   mapManager = new MapManager('map');
   mapManager.init(center.lat, center.lng, 17);
 
-  // Draw lines
-  drawTrackLines();
+  // Draw all course lines
+  drawAllCourseLines();
 
-  // Place driver marker slightly south of start/finish (avoid immediate crossing trigger)
+  // Place driver marker slightly south of first course's start/finish
   mapManager.createDriverMarker(center.lat - 0.0002, center.lng);
 }
 
-function drawTrackLines() {
-  const sf = trackConfig.startFinish;
-  const s2 = trackConfig.sector2;
-  const s3 = trackConfig.sector3;
-
-  mapManager.setStartFinishLine(sf.pointA, sf.pointB);
-  mapManager.setSector2Line(s2.pointA, s2.pointB);
-  mapManager.setSector3Line(s3.pointA, s3.pointB);
+function drawAllCourseLines() {
+  mapManager.removeAllCourseLines();
+  mapManager.drawAllCourseLines(trackJson.courses);
 }
 
 function initDataDisplay() {
   dataDisplay = new DataDisplay({
+    // Detection
+    trackName: 'val-track-name',
+    detectionState: 'val-detection-state',
+    detectedCourse: 'val-detected-course',
+    coursePanels: 'course-panels',
+
+    // Timing
     currentLapTime: 'val-current-lap',
     lastLapTime: 'val-last-lap',
     bestLapTime: 'val-best-lap',
@@ -90,6 +80,8 @@ function initDataDisplay() {
     raceStarted: 'val-race-started',
     currentSector: 'val-current-sector',
     paceDifference: 'val-pace-diff',
+
+    // Sectors
     sector1Time: 'val-sector1',
     sector2Time: 'val-sector2',
     sector3Time: 'val-sector3',
@@ -97,6 +89,8 @@ function initDataDisplay() {
     bestSector2: 'val-best-s2',
     bestSector3: 'val-best-s3',
     optimalLap: 'val-optimal-lap',
+
+    // Distance
     currentLapDist: 'val-current-dist',
     totalDist: 'val-total-dist',
     speed: 'val-speed',
@@ -114,12 +108,12 @@ function initControls() {
   });
 
   controls.init();
-  controls.setTrackInputs(trackConfig.startFinish, trackConfig.sector2, trackConfig.sector3);
+  controls.setTrackJson(trackJson);
 }
 
 function initSimulator() {
   simulator = new GpsSimulator(
-    lapTimer,
+    courseManager,
     () => mapManager.getDriverPosition(),
     handleSimTick
   );
@@ -140,7 +134,6 @@ function handleStop() {
     simulator.stop();
     sessionLogger.stopRecording();
 
-    // Auto-download the .dove log file
     if (sessionLogger.getSampleCount() > 0) {
       sessionLogger.downloadFile();
     }
@@ -151,64 +144,156 @@ function handleReset() {
   if (simulator.isRunning()) {
     simulator.stop();
   }
-  lapTimer.reset();
+  courseManager.reset();
   mapManager.clearTrail();
-  // Force a display update to clear values
-  dataDisplay.update(lapTimer, { speedKmh: 0, tickCount: 0 });
-  dataDisplay.setCrossingIndicator(false);
+  mapManager.removeWaypointMarker();
+  waypointDrawn = false;
+  detectionHandled = false;
+
+  // Redraw all course lines (they may have been pruned)
+  drawAllCourseLines();
+
+  // Reset displays
+  updateDetectionDisplay('--');
+  dataDisplay.clearMultiCourse();
+  resetTimingDisplay();
 }
 
-function handleTrackDataChange(data) {
-  // Stop sim if running
+function handleTrackDataChange(newTrackJson) {
   const wasRunning = simulator.isRunning();
   if (wasRunning) simulator.stop();
 
-  // Update track config with valid values
-  if (data.startFinish) trackConfig.startFinish = data.startFinish;
-  if (data.sector2) trackConfig.sector2 = data.sector2;
-  if (data.sector3) trackConfig.sector3 = data.sector3;
+  // Update track JSON and rebuild everything
+  trackJson = newTrackJson;
+  initCourseManager();
 
-  // Re-apply to lap timer
-  applyTrackConfig();
-  lapTimer.reset();
+  // Rebuild simulator with new course manager
+  simulator = new GpsSimulator(
+    courseManager,
+    () => mapManager.getDriverPosition(),
+    handleSimTick
+  );
 
-  // Redraw lines on map
-  drawTrackLines();
-
-  // Center map on new start/finish
-  const center = getLineMidpoint(trackConfig.startFinish);
+  // Redraw map
+  drawAllCourseLines();
+  const center = getTrackCenter(trackJson);
   mapManager.centerOn(center.lat, center.lng);
+  mapManager.clearTrail();
+  mapManager.removeWaypointMarker();
 
-  // Reset display
-  dataDisplay.update(lapTimer, { speedKmh: 0, tickCount: 0 });
-  dataDisplay.setCrossingIndicator(false);
+  // Reset state
+  waypointDrawn = false;
+  detectionHandled = false;
+  updateDetectionDisplay('--');
+  dataDisplay.clearMultiCourse();
+  resetTimingDisplay();
 }
 
 function handleSimTick(simInfo) {
-  // Log every sample (25Hz) to the session logger
+  // Log every sample to session logger
   sessionLogger.logSample(simInfo.lat, simInfo.lng, simInfo.speedKmh);
 
   // Add trail point
   mapManager.addTrailPoint(simInfo.lat, simInfo.lng);
+
+  // Handle detection state changes (map updates)
+  handleDetectionMapUpdates();
 
   // Throttle display updates
   const now = performance.now();
   if (now - lastDisplayUpdate < DISPLAY_UPDATE_INTERVAL_MS) return;
   lastDisplayUpdate = now;
 
-  dataDisplay.update(lapTimer, simInfo);
-  dataDisplay.setCrossingIndicator(lapTimer.getCrossing());
+  // Update detection status
+  const detector = courseManager.getDetector();
+  const detectorState = detector.getState();
+  updateDetectionDisplay(detectorState);
+
+  // Update multi-course panels (always, shows all courses during detection)
+  dataDisplay.updateMultiCourse(courseManager, simInfo);
+
+  // Update single-course timing display
+  if (courseManager.isDetectionComplete()) {
+    const activeTimer = courseManager.getActiveTimer();
+    if (activeTimer) {
+      dataDisplay.update(activeTimer, simInfo);
+      dataDisplay.setCrossingIndicator(activeTimer.getCrossing());
+    }
+  } else {
+    // Before detection, show timing from the first course (they all get same data)
+    const allCourses = courseManager.getAllCourses();
+    if (allCourses.length > 0 && allCourses[0].timer) {
+      dataDisplay.update(allCourses[0].timer, simInfo);
+      dataDisplay.setCrossingIndicator(allCourses[0].timer.getCrossing());
+    }
+  }
+}
+
+// ─── DETECTION MAP UPDATES ───────────────────────────────────────────
+
+function handleDetectionMapUpdates() {
+  const detector = courseManager.getDetector();
+  const state = detector.getState();
+
+  // Draw waypoint blip when first set
+  if (state === DETECT_STATE_WAYPOINT_SET && !waypointDrawn) {
+    const wp = detector.getWaypoint();
+    if (wp) {
+      mapManager.setWaypointMarker(wp.lat, wp.lng);
+      waypointDrawn = true;
+    }
+  }
+
+  // Handle detection complete - prune courses, clean up map
+  if (state === DETECT_STATE_DETECTED && !detectionHandled) {
+    detectionHandled = true;
+
+    // Remove non-active course lines from map
+    const activeIndex = courseManager.getActiveCourseIndex();
+    const allCourses = courseManager.getAllCourses();
+    for (let i = 0; i < allCourses.length; i++) {
+      if (i !== activeIndex) {
+        mapManager.removeCourseLines(i);
+      }
+    }
+
+    // Remove waypoint
+    mapManager.removeWaypointMarker();
+
+    // Prune inactive timers to free memory
+    courseManager.pruneInactiveCourses();
+  }
+}
+
+// ─── DISPLAY HELPERS ─────────────────────────────────────────────────
+
+function updateDetectionDisplay(state) {
+  const detector = courseManager.getDetector();
+  dataDisplay.setDetectionStatus(
+    courseManager.getTrackName(),
+    state,
+    courseManager.getActiveCourseName()
+  );
+}
+
+function resetTimingDisplay() {
+  const allCourses = courseManager.getAllCourses();
+  if (allCourses.length > 0 && allCourses[0].timer) {
+    dataDisplay.update(allCourses[0].timer, { speedKmh: 0, tickCount: 0 });
+  }
+  dataDisplay.setCrossingIndicator(false);
 }
 
 // ─── BOOT ────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-  initLapTimer();
+  initCourseManager();
   initMap();
   initDataDisplay();
   initControls();
   initSimulator();
 
   // Initial display state
-  dataDisplay.update(lapTimer, { speedKmh: 0, tickCount: 0 });
+  updateDetectionDisplay('--');
+  resetTimingDisplay();
 });

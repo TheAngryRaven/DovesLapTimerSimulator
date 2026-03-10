@@ -175,30 +175,88 @@ button.running {
   to { opacity: 1.0; }
 }
 
-/* ─── TRACK DATA INPUTS ─────────────────────────────────────────────── */
+/* ─── TRACK JSON INPUT ──────────────────────────────────────────────── */
 
-.track-inputs label {
-  display: block;
-  font-size: 10px;
-  color: #666;
-  text-transform: uppercase;
-  margin-top: 6px;
-  margin-bottom: 2px;
-}
-
-.track-inputs input {
+.track-json-input textarea {
   width: 100%;
   font-family: 'Courier New', Courier, monospace;
-  font-size: 11px;
-  padding: 4px 6px;
+  font-size: 10px;
+  padding: 6px;
   background: #1a1a2e;
   color: #e0e0e0;
   border: 1px solid #0f3460;
+  resize: vertical;
+  line-height: 1.3;
 }
 
-.track-inputs input:focus {
+.track-json-input textarea:focus {
   outline: none;
   border-color: #e94560;
+}
+
+/* ─── COURSE PANELS (multi-course detection view) ──────────────────── */
+
+#course-panels {
+  margin-top: 8px;
+}
+
+.course-panel {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border: 1px solid #0f3460;
+  border-left: 3px solid #666;
+  background: #1a1a2e;
+}
+
+.course-panel.active {
+  border-left-color: #00ff88;
+  background: #1a2e1a;
+}
+
+.course-panel.inactive {
+  opacity: 0.35;
+}
+
+.course-name {
+  font-size: 12px;
+  font-weight: bold;
+  color: #e0e0e0;
+  margin-bottom: 2px;
+}
+
+.course-length {
+  font-size: 10px;
+  font-weight: normal;
+  color: #666;
+}
+
+.course-data {
+  font-size: 11px;
+  color: #00ff88;
+  display: flex;
+  gap: 12px;
+}
+
+/* ─── WAYPOINT MARKER ──────────────────────────────────────────────── */
+
+.waypoint-icon {
+  background: none !important;
+  border: none !important;
+}
+
+.waypoint-blip {
+  width: 14px;
+  height: 14px;
+  background: #00ccff;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(0, 204, 255, 0.8);
+  animation: waypoint-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes waypoint-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
 }
 
 /* ─── DRIVER ICON ───────────────────────────────────────────────────── */

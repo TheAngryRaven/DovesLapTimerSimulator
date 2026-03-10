@@ -2,7 +2,11 @@
  * GPS Simulator - pretends we have GPS lock and feeds DovesLapTimer at 25Hz.
  *
  * Reads the draggable marker position, calculates speed from position deltas,
- * and calls lapTimer.updateCurrentTime() + lapTimer.loop() each tick.
+ * and calls feedTarget.updateCurrentTime() + feedTarget.loop() each tick.
+ *
+ * The feed target is duck-typed: any object with updateCurrentTime(ms) and
+ * loop(lat, lng, alt, speedKnots) works. This means both DovesLapTimer and
+ * CourseManager can be fed without the simulator knowing which one it has.
  *
  * C++ notes for back-port:
  *   - This replaces the real GPS hardware + Adafruit_GPS library
@@ -18,12 +22,12 @@ const TICK_INTERVAL_MS = 1000 / TICK_RATE_HZ; // 40ms
 
 export class GpsSimulator {
   /**
-   * @param {DovesLapTimer} lapTimer - The lap timer instance to feed
+   * @param {object} feedTarget - Any object with updateCurrentTime(ms) and loop(lat, lng, alt, speedKnots)
    * @param {function} getPosition - Returns { lat, lng } of current marker position
    * @param {function} onTick - Callback after each tick with current state
    */
-  constructor(lapTimer, getPosition, onTick = null) {
-    this._lapTimer = lapTimer;
+  constructor(feedTarget, getPosition, onTick = null) {
+    this._feedTarget = feedTarget;
     this._getPosition = getPosition;
     this._onTick = onTick;
 
@@ -91,9 +95,9 @@ export class GpsSimulator {
     this._prevLat = lat;
     this._prevLng = lng;
 
-    // Feed the lap timer (altitude = 0 as specified)
-    this._lapTimer.updateCurrentTime(this._simTime);
-    this._lapTimer.loop(lat, lng, 0, speedKnots);
+    // Feed the target (altitude = 0 as specified)
+    this._feedTarget.updateCurrentTime(this._simTime);
+    this._feedTarget.loop(lat, lng, 0, speedKnots);
 
     this._tickCount++;
 

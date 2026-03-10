@@ -1,8 +1,10 @@
 /**
- * Controls - handles Start/Stop buttons and track data input fields.
+ * Controls - handles Start/Stop buttons and track data JSON input.
  *
  * Wires up DOM event listeners and delegates to callbacks.
  */
+
+import { parseTrackJson } from '../sim/track-data-json.js';
 
 export class Controls {
   /**
@@ -39,20 +41,12 @@ export class Controls {
     }
   }
 
-  /** Set initial values in the track data input fields */
-  setTrackInputs(startFinish, sector2, sector3) {
-    this._setInputValue('input-start-finish', this._lineToString(startFinish));
-    this._setInputValue('input-sector-2', this._lineToString(sector2));
-    this._setInputValue('input-sector-3', this._lineToString(sector3));
-  }
-
-  /** Get track data from input fields. Returns null per field if invalid. */
-  getTrackInputs() {
-    return {
-      startFinish: this._parseLineInput('input-start-finish'),
-      sector2: this._parseLineInput('input-sector-2'),
-      sector3: this._parseLineInput('input-sector-3'),
-    };
+  /** Set the track JSON textarea content */
+  setTrackJson(trackJson) {
+    const el = document.getElementById('input-track-json');
+    if (el) {
+      el.value = JSON.stringify(trackJson, null, 2);
+    }
   }
 
   /** Toggle start/stop */
@@ -76,33 +70,19 @@ export class Controls {
     }
   }
 
-  /** Read and apply track data from inputs */
+  /** Read and apply track data from JSON textarea */
   _applyTrackData() {
-    const data = this.getTrackInputs();
-    if (this._callbacks.onTrackDataChange) {
-      this._callbacks.onTrackDataChange(data);
+    const el = document.getElementById('input-track-json');
+    if (!el) return;
+
+    const parsed = parseTrackJson(el.value);
+    if (!parsed) {
+      alert('Invalid track JSON. Needs courses array with name, lengthFt, and start line coordinates.');
+      return;
     }
-  }
 
-  // ─── HELPERS ──────────────────────────────────────────────────────────
-
-  _setInputValue(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.value = value;
-  }
-
-  _parseLineInput(id) {
-    const el = document.getElementById(id);
-    if (!el) return null;
-    const parts = el.value.split(',').map(s => parseFloat(s.trim()));
-    if (parts.length !== 4 || parts.some(isNaN)) return null;
-    return {
-      pointA: { lat: parts[0], lng: parts[1] },
-      pointB: { lat: parts[2], lng: parts[3] },
-    };
-  }
-
-  _lineToString(line) {
-    return `${line.pointA.lat}, ${line.pointA.lng}, ${line.pointB.lat}, ${line.pointB.lng}`;
+    if (this._callbacks.onTrackDataChange) {
+      this._callbacks.onTrackDataChange(parsed);
+    }
   }
 }
